@@ -1,0 +1,176 @@
+--// Silent Aim Configuration
+getgenv().Silent = {
+    Settings = {
+        Toggled = false, -- Initially off; toggled via GUI
+        AimPart = "Head", -- Aim at the head part
+        HitChance = 100, -- 100% accuracy, it will never miss
+        Prediction = {
+            Toggled = true,
+            Value = 0.124231, -- Optimized prediction
+            AutoPred = true, -- Auto-predict enabled
+            JumpOffset = 0.08,
+            AntiGroundShots = true,
+            Resolve = false, -- Not using resolution for now
+        },
+        Circle = {
+            Visible = false, -- Invisible circle
+            Transparency = 0.5,
+            Thickness = 3,
+            NumSides = 100,
+            Radius = 100,
+            Filled = false,
+        },
+        RainbowTarget = true,
+        WallCheck = true,
+        AutoShoot = false,
+        BulletTp = false,
+        FriendCheck = false,
+    },
+    TargetPlayer = nil, -- To be set by Camlock
+}
+
+--// Load Silent Aim Script
+loadstring(game:HttpGet("https://raw.githubusercontent.com/hi999999-max/silent-aim/refs/heads/main/Better-Silent-Aim", true))()
+
+--// Services
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+--// Variables
+local camlockOn = false
+local mode = "LEGIT"
+local lockedPlayer = nil
+local highlightBox = nil
+
+--// GUI Creation
+local function createGui()
+    local gui = Instance.new("ScreenGui", LocalPlayer:WaitForChild("PlayerGui"))
+    gui.Name = "CamlockGUI"
+    gui.ResetOnSpawn = false
+
+    local btn = Instance.new("TextButton", gui)
+    btn.Name = "ToggleButton"
+    btn.Size = UDim2.new(0, 140, 0, 50)
+    btn.Position = UDim2.new(0.8, 0, 0.85, 0)
+    btn.Text = "Mode: LEGIT"
+    btn.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+    btn.BorderColor3 = Color3.fromRGB(255, 0, 0)
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 20
+    btn.AutoButtonColor = true
+    btn.Draggable = true
+    btn.Active = true
+    btn.Selectable = true
+
+    return btn
+end
+
+local button = createGui()
+
+--// Mode Switch Logic
+local function switchMode()
+    if mode == "LEGIT" then
+        mode = "TRYHARD"
+    elseif mode == "TRYHARD" then
+        mode = "BRILLIANT"
+    else
+        mode = "LEGIT"
+    end
+    button.Text = "Mode: " .. mode
+end
+
+--// Highlight Target
+local function highlightTarget(char)
+    if highlightBox then highlightBox:Destroy() end
+    local head = char:FindFirstChild("Head")
+    if head then
+        local box = Instance.new("BoxHandleAdornment")
+        box.Size = Vector3.new(2, 2, 2)
+        box.Adornee = head
+        box.AlwaysOnTop = true
+        box.ZIndex = 10
+        box.Color3 = Color3.fromRGB(255, 0, 0)
+        box.Transparency = 0.6
+        box.Parent = head
+        highlightBox = box
+    end
+end
+
+--// Closest Player Finder
+local function getClosestPlayer()
+    local myChar = LocalPlayer.Character
+    if not myChar then return nil end
+    local myHead = myChar:FindFirstChild("Head")
+    if not myHead then return nil end
+
+    local closest, shortest = nil, math.huge
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer and plr.Character and plr.Character:FindFirstChild("Head") then
+            local dist = (myHead.Position - plr.Character.Head.Position).Magnitude
+            if dist < shortest then
+                shortest = dist
+                closest = plr
+            end
+        end
+    end
+    return closest
+end
+
+--// Predict Movement with No Misses
+local function getPredictedPosition(plr)
+    local head = plr.Character and plr.Character:FindFirstChild("Head")
+    if not head then return nil end
+    local velocity = plr.Character:FindFirstChild("HumanoidRootPart") and plr.Character.HumanoidRootPart.Velocity or Vector3.zero
+    local predictTime = mode == "LEGIT" and 0.1 or (mode == "TRYHARD" and 0.15 or 0.2)
+
+    -- Always perfectly predicts, no randomness
+    local predicted = head.Position + velocity * predictTime
+    return predicted
+end
+
+--// Lock-on Loop with 100% Accuracy
+RunService.RenderStepped:Connect(function()
+    if camlockOn and lockedPlayer and lockedPlayer.Character then
+        local pos = getPredictedPosition(lockedPlayer)
+        if pos then
+            local camPos = Camera.CFrame.Position
+            Camera.CFrame = CFrame.new(camPos, pos)
+        end
+    end
+end)
+
+--// Toggle Camlock + Silent Aim Sync
+local function toggleCamlock()
+    camlockOn = not camlockOn
+    button.BackgroundColor3 = camlockOn and Color3.fromRGB(0, 100, 0) or Color3.fromRGB(25, 25, 25)
+    getgenv().Silent.Settings.Toggled = camlockOn
+
+    if camlockOn then
+        lockedPlayer = getClosestPlayer()
+        if lockedPlayer then
+            highlightTarget(lockedPlayer.Character)
+            getgenv().Silent.TargetPlayer = lockedPlayer -- Sync with Silent Aim
+        end
+    else
+        lockedPlayer = nil
+        getgenv().Silent.TargetPlayer = nil
+        if highlightBox then highlightBox:Destroy() end
+    end
+end
+
+--// GUI Button
+button.MouseButton1Click:Connect(toggleCamlock)
+button.MouseButton2Click:Connect(switchMode)
+
+--// Restore GUI on Respawn
+LocalPlayer.CharacterAdded:Connect(function()
+    task.wait(1)
+    if not LocalPlayer:WaitForChild("PlayerGui"):FindFirstChild("CamlockGUI") then
+        button = createGui()
+        button.MouseButton1Click:Connect(toggleCamlock)
+        button.MouseButton2Click:Connect(switchMode)
+    end
+end)
